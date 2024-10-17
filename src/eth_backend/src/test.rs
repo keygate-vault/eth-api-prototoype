@@ -1,7 +1,9 @@
 
 #[cfg(test)]
 mod tests {
-    use pocket_ic::PocketIc;
+    use pocket_ic::{nonblocking::query_candid, PocketIc};
+
+    use crate::TransactionRequest;
 
     use super::*;
 
@@ -16,8 +18,13 @@ mod tests {
         let wasm_module = include_bytes!("../../../target/wasm32-unknown-unknown/release/eth_backend.wasm").to_vec();
         pic.install_canister(canister_id, wasm_module, Vec::new(), None);
 
-        // Execute test functions or methods
+        let payload = TransactionRequest {
+            to: "0x1234567890".to_string(),
+            value: 100,
+        };
         
+        // Execute test functions or methods
+        let res = query_candid(pic, canister_id, "create_transaction", payload).await;
 
         // Execute transactions on the canister
 

@@ -3,8 +3,6 @@ name = "eth_backend"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 crate-type = ["cdylib"]
 
@@ -12,4 +10,11 @@ crate-type = ["cdylib"]
 candid = "0.10"
 ic-cdk = "0.16"
 ic-cdk-timers = "0.10" # Feel free to remove this dependency if you don't need timers
+
+[dev-dependencies]
+once_cell = "1.15"
+tokio = { version = "1.0", features = ["full", "macros"] }
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+libflate = "2.1.0"
+rand = "0.8.5"
 pocket-ic = "5.0.0"

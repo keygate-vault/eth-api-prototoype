@@ -1,10 +1,10 @@
 
-type TransactionRequest = {
+type TransactionRequest = record {
     to: text;
     value: nat64;
 };
 
-type TransactionResult = {
+type TransactionResult = record {
     hash: text;
     status: text;
 };
