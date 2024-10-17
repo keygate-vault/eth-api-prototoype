@@ -1,0 +1,15 @@
+
+type TransactionRequest = {
+    to: text;
+    value: nat64;
+};
+
+type TransactionResult = {
+    hash: text;
+    status: text;
+};
+
+service : {
+    "execute_transaction": (TransactionRequest) -> (TransactionResult) query;
+    "get_transactions": (text) -> (vec TransactionResult) query;
+}

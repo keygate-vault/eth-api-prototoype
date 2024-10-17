@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "eth_backend": {
+      "candid": "src/eth_backend/eth_backend.did",
+      "package": "eth_backend",
+      "type": "rust"
+    },
+    "eth_frontend": {
+      "dependencies": [
+        "eth_backend"
+      ],
+      "source": [
+        "src/eth_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "eth_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

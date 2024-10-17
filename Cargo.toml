@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/eth_backend"
+]
+resolver = "2"
