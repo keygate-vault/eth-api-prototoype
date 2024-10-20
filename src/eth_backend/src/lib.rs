@@ -1,5 +1,6 @@
 use candid::{CandidType, Principal};
 use ethers_core;
+use ic_cdk::api::management_canister::http_request::HttpHeader;
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -10,14 +11,50 @@ fn greet(name: String) -> String {
     format!("Hello, {}!", name)
 }
 
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
+struct RpcApi {
+    pub url: String,
+    pub headers: Option<Vec<HttpHeader>>,
+}
 
-#[derive(CandidType, Serialize, Deserialize,Clone)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+)]
+enum EthMainnetService {
+    Alchemy,
+    Ankr,
+    BlockPi,
+    PublicNode,
+    Cloudflare,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+)]
+enum EthSepoliaService {
+    Alchemy,
+    Ankr,
+    BlockPi,
+    PublicNode,
+}
+
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
+enum RpcService {
+    EthMainnet(EthMainnetService),
+    EthSepolia(EthSepoliaService),
+    Chain(u64),
+    Provider(u64),
+    Custom(RpcApi),
+}
+static RPC_SERVICE: RpcService = RpcService::EthSepolia(EthSepoliaService::PublicNode);
+
+#[derive(CandidType, Serialize, Deserialize, Clone)]
 struct TransactionRequest {
     to: String,
     value: u64,
 }
 
-#[derive(CandidType, Serialize, Deserialize,Clone)]
+#[derive(CandidType, Serialize, Deserialize, Clone)]
 struct TransactionResult {
     hash: String,
     status: String,
@@ -98,9 +135,42 @@ async fn get_public_key() -> Result<PublicKeyReply, String> {
     })
 }
 
-
 #[ic_cdk::update]
 async fn execute_transaction(request: TransactionRequest) -> TransactionResult {
+    let payload = format!(
+        r#"{{"jsonrpc":"2.0","method":"eth_getBalance","params":["{}","latest"],"id":1}}"#,
+        pubkey_bytes_to_address().await
+    );
+    const maxResponseSize: u64 = 1000;
+    let canisterId = Principal::from_text("aaaaa-aa").unwrap();
+    let params = (&RPC_SERVICE, payload, maxResponseSize);
+
+    let (cycles_result,): (Result<u128, String>,) =
+        ic_cdk::api::call::call(canisterId, "requestCost", params.clone())
+            .await
+            .unwrap();
+
+    let cycles = cycles_result
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("error in `request_cost`: {:?}", e)));
+
+    let (result,): (Result<String, String>,) =
+        ic_cdk::api::call::call_with_payment128(canisterId, "request", params, cycles)
+            .await
+            .unwrap();
+
+    ic_cdk::println!("RPC result: {:?}", result);
+
+    match result {
+        Ok(response) => match u128::from_str_radix(&response[36..response.len() - 2], 16) {
+            Ok(balance) => balance,
+            Err(e) => ic_cdk::trap(&format!(
+                "error parsing balance from response: {:?}, response: {:?}",
+                e, response
+            )),
+        },
+        Err(err) => ic_cdk::trap(&format!("error in `request` with cycles: {:?}", err)),
+    };
+
     TransactionResult {
         hash: "0x1234567890".to_string(),
         status: "success".to_string(),
