@@ -1,9 +1,9 @@
 
 #[cfg(test)]
 mod tests {
-    use pocket_ic::{nonblocking::query_candid, PocketIc};
+    use pocket_ic::{query_candid, update_candid, PocketIc};
 
-    use crate::TransactionRequest;
+    use crate::{TransactionRequest, TransactionResult};
 
     use super::*;
 
@@ -24,11 +24,14 @@ mod tests {
         };
         
         // Execute test functions or methods
-        let res = query_candid(pic, canister_id, "create_transaction", payload).await;
+        let res: (TransactionResult, ) = update_candid(&pic, canister_id, "execute_transaction", (payload,)).unwrap();
 
-        // Execute transactions on the canister
+        // Query RPC to get ether balance for "to" address
+        let res = query_candid(&pic, rpc_canister_id, "eth_getBalance", (payload.to,)).unwrap();
 
-        // Assert expected results
+
+        // Assert that the transaction was successful
+        // Assert that the ether balance for "to" address is equal to the value of the transaction
         assert!(true);
     }
 }

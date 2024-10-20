@@ -15,7 +15,7 @@ type Result_1 = variant { Ok : SignatureReply; Err : text };
 type SignatureReply = record { signature : blob };
 
 service : {
-    "execute_transaction": (TransactionRequest) -> (TransactionResult) query;
+    "execute_transaction": (TransactionRequest) -> (TransactionResult);
     "get_transactions": (text) -> (vec TransactionResult) query;
     "get_public_key" : () -> (Result);
     "pubkey_bytes_to_address" : () -> (text);

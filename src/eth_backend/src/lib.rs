@@ -10,11 +10,14 @@ fn greet(name: String) -> String {
     format!("Hello, {}!", name)
 }
 
+
+#[derive(CandidType, Serialize, Deserialize,Clone)]
 struct TransactionRequest {
     to: String,
     value: u64,
 }
 
+#[derive(CandidType, Serialize, Deserialize,Clone)]
 struct TransactionResult {
     hash: String,
     status: String,
@@ -93,4 +96,13 @@ async fn get_public_key() -> Result<PublicKeyReply, String> {
     Ok(PublicKeyReply {
         public_key: res.public_key,
     })
+}
+
+
+#[ic_cdk::update]
+async fn execute_transaction(request: TransactionRequest) -> TransactionResult {
+    TransactionResult {
+        hash: "0x1234567890".to_string(),
+        status: "success".to_string(),
+    }
 }
