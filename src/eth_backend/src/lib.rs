@@ -176,3 +176,40 @@ async fn execute_transaction(request: TransactionRequest) -> TransactionResult {
         status: "success".to_string(),
     }
 }
+
+#[ic_cdk::update]
+async fn get_balance() -> u128 {
+    let payload = format!(
+        r#"{{"jsonrpc":"2.0","method":"eth_getBalance","params":["{}","latest"],"id":1}}"#,
+        pubkey_bytes_to_address().await
+    );
+    const maxResponseSize: u64 = 1000;
+    let canisterId = Principal::from_text("7hfb6-caaaa-aaaar-qadga-cai").unwrap();
+    let params = (&RPC_SERVICE, payload, maxResponseSize);
+
+    let (cycles_result,): (Result<u128, String>,) =
+        ic_cdk::api::call::call(canisterId, "requestCost", params.clone())
+            .await
+            .unwrap();
+
+    let cycles = cycles_result
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("error in `request_cost`: {:?}", e)));
+
+    let (result,): (Result<String, String>,) =
+        ic_cdk::api::call::call_with_payment128(canisterId, "request", params, cycles)
+            .await
+            .unwrap();
+
+    ic_cdk::println!("RPC result: {:?}", result);
+
+    match result {
+        Ok(response) => match u128::from_str_radix(&response[36..response.len() - 2], 16) {
+            Ok(balance) => balance,
+            Err(e) => ic_cdk::trap(&format!(
+                "error parsing balance from response: {:?}, response: {:?}",
+                e, response
+            )),
+        },
+        Err(err) => ic_cdk::trap(&format!("error in `request` with cycles: {:?}", err)),
+    }
+}

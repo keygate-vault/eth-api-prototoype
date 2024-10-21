@@ -19,5 +19,6 @@ service : {
     "get_transactions": (text) -> (vec TransactionResult) query;
     "get_public_key" : () -> (Result);
     "pubkey_bytes_to_address" : () -> (text);
+    "get_balance": () -> (u128);
     "get_address": (text) -> (text) query;
 }
