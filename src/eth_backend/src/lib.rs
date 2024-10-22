@@ -1,22 +1,22 @@
 use candid::{CandidType, Principal};
 use ethers_core;
-use ic_cdk::api::management_canister::http_request::HttpHeader;
 use serde::{Deserialize, Serialize};
 
 use alloy::{
-    network::TxSigner,
-    primitives::Address,
-    providers::{Provider, ProviderBuilder},
-    signers::icp::IcpSigner,
-    transports::icp::{EthSepoliaService, IcpConfig, RpcApi, RpcService},
+    network::{EthereumWallet, TxSigner}, primitives::Address, providers::{Provider, ProviderBuilder}, transports::icp::{EthSepoliaService, IcpConfig, RpcService}
 };
+use types::create_icp_sepolia_signer;
+
+
+#[cfg(test)]
+mod test;
+
+mod types;
 
 thread_local! {
     static KEY_NAME : std::cell::RefCell<String> = std::cell::RefCell::new("dfx_test_key".to_string());
 }
 
-#[cfg(test)]
-mod test;
 
 static RPC_SERVICE: RpcService = RpcService::EthSepolia(EthSepoliaService::PublicNode);
 
@@ -120,40 +120,11 @@ async fn get_public_key() -> Result<PublicKeyReply, String> {
 
 #[ic_cdk::update]
 async fn execute_transaction(request: TransactionRequest) -> TransactionResult {
-    ic_cdk::println!("Executing transaction: {:?}", request);
-    let payload = format!(
-        r#"{{"jsonrpc":"2.0","method":"eth_getBalance","params":["{}","latest"],"id":1}}"#,
-        pubkey_bytes_to_address().await
-    );
-    const maxResponseSize: u64 = 1000;
-    let canister_id = Principal::from_text("aaaaa-aa").unwrap();
-    let params = (&RPC_SERVICE, payload, maxResponseSize);
+    let signer = create_icp_sepolia_signer().await;
+    let address = signer.address();
 
-    let (cycles_result,): (Result<u128, String>,) =
-        ic_cdk::api::call::call(canister_id, "requestCost", params.clone())
-            .await
-            .unwrap();
-
-    let cycles = cycles_result
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("error in `request_cost`: {:?}", e)));
-
-    let (result,): (Result<String, String>,) =
-        ic_cdk::api::call::call_with_payment128(canister_id, "request", params, cycles)
-            .await
-            .unwrap();
-
-    ic_cdk::println!("RPC result: {:?}", result);
-
-    match result {
-        Ok(response) => match u128::from_str_radix(&response[36..response.len() - 2], 16) {
-            Ok(balance) => balance,
-            Err(e) => ic_cdk::trap(&format!(
-                "error parsing balance from response: {:?}, response: {:?}",
-                e, response
-            )),
-        },
-        Err(err) => ic_cdk::trap(&format!("error in `request` with cycles: {:?}", err)),
-    };
+    let wallet = EthereumWallet::from(signer);
+    let rpc_service = get_rpc_service_sepolia();
 
     TransactionResult {
         hash: "0x1234567890".to_string(),
