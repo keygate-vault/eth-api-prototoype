@@ -1,9 +1,4 @@
 
-type TransactionRequest = record {
-    to: text;
-    value: nat64;
-};
-
 type TransactionResult = record {
     hash: text;
     status: text;
@@ -17,10 +12,10 @@ type Result_1 = variant { Ok : SignatureReply; Err : text };
 type SignatureReply = record { signature : blob };
 
 service : (text) -> {
-    "execute_transaction": (TransactionRequest) -> (TransactionResult);
+    "execute_transaction": () -> (TransactionResult);
     "get_transactions": (text) -> (vec TransactionResult) query;
     "get_public_key" : () -> (ResultKey);
-    "pubkey_bytes_to_address" : () -> (text);
+    "pubkey_bytes_to_address" : () -> (Result);
     "get_balance": () -> (Result);
     "get_address": (text) -> (text) query;
 }

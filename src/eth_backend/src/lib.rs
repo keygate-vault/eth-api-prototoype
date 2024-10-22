@@ -1,12 +1,17 @@
 use candid::{CandidType, Principal};
 use ethers_core;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 
 use alloy::{
-    network::{EthereumWallet, TxSigner}, primitives::Address, providers::{Provider, ProviderBuilder}, transports::icp::{EthSepoliaService, IcpConfig, RpcService}
+    network::{EthereumWallet, TransactionBuilder},
+    primitives::U256,
+    providers::{Provider, ProviderBuilder},
+    rpc::types::TransactionRequest,
+    signers::Signer,
+    transports::icp::{EthSepoliaService, IcpConfig, RpcService},
 };
 use types::create_icp_sepolia_signer;
-
 
 #[cfg(test)]
 mod test;
@@ -15,16 +20,10 @@ mod types;
 
 thread_local! {
     static KEY_NAME : std::cell::RefCell<String> = std::cell::RefCell::new("dfx_test_key".to_string());
+    static NONCE: RefCell<Option<u64>> = const { RefCell::new(None) };
 }
-
 
 static RPC_SERVICE: RpcService = RpcService::EthSepolia(EthSepoliaService::PublicNode);
-
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-struct TransactionRequest {
-    to: String,
-    value: u64,
-}
 
 #[derive(CandidType, Serialize, Deserialize, Clone)]
 struct TransactionResult {
@@ -73,24 +72,10 @@ fn init(key_name: String) {
 }
 
 #[ic_cdk::update]
-async fn pubkey_bytes_to_address() -> String {
-    use ethers_core::k256::elliptic_curve::sec1::ToEncodedPoint;
-    use ethers_core::k256::Secp256k1;
-    let public_key = get_public_key().await.unwrap().public_key;
-    let key: ethers_core::k256::elliptic_curve::PublicKey<Secp256k1> =
-        ethers_core::k256::elliptic_curve::PublicKey::from_sec1_bytes(&public_key)
-            .expect("failed to parse the public key as SEC1");
-    let point = key.to_encoded_point(false);
-    // we re-encode the key to the decompressed representation.
-    let point_bytes: &[u8] = point.as_bytes();
-    assert_eq!(point_bytes[0], 0x04);
-
-    let hash = ethers_core::utils::keccak256(&point_bytes[1..]);
-
-    ethers_core::utils::to_checksum(
-        &ethers_core::types::Address::from_slice(&hash[12..32]),
-        None,
-    )
+async fn pubkey_bytes_to_address() -> Result<String, String> {
+    let signer = create_icp_sepolia_signer().await;
+    let address = signer.address();
+    Ok(address.to_string())
 }
 
 #[ic_cdk::update]
@@ -119,23 +104,75 @@ async fn get_public_key() -> Result<PublicKeyReply, String> {
 }
 
 #[ic_cdk::update]
-async fn execute_transaction(request: TransactionRequest) -> TransactionResult {
+async fn execute_transaction() -> TransactionResult {
+    // Setup signer
     let signer = create_icp_sepolia_signer().await;
     let address = signer.address();
 
+    // Setup provider
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let config = IcpConfig::new(RPC_SERVICE.clone());
+    let provider = ProviderBuilder::new()
+        .with_gas_estimation()
+        .wallet(wallet)
+        .on_icp(config);
 
-    TransactionResult {
-        hash: "0x1234567890".to_string(),
-        status: "success".to_string(),
+    // Attempt to get nonce from thread-local storage
+    let maybe_nonce = NONCE.with_borrow(|maybe_nonce| {
+        // If a nonce exists, the next nonce to use is latest nonce + 1
+        maybe_nonce.map(|nonce| nonce + 1)
+    });
+
+    // If no nonce exists, get it from the provider
+    let nonce = if let Some(nonce) = maybe_nonce {
+        nonce
+    } else {
+        provider.get_transaction_count(address).await.unwrap_or(0)
+    };
+
+    let tx = TransactionRequest::default()
+        .with_to(address)
+        .with_value(U256::from(100))
+        .with_nonce(nonce)
+        .with_gas_limit(21_000)
+        .with_chain_id(11155111);
+
+    let transport_result = provider.send_transaction(tx.clone()).await;
+    match transport_result {
+        Ok(builder) => {
+            let node_hash = *builder.tx_hash();
+            let tx_response = provider.get_transaction_by_hash(node_hash).await.unwrap();
+
+            match tx_response {
+                Some(tx) => {
+                    // The transaction has been mined and included in a block, the nonce
+                    // has been consumed. Save it to thread-local storage. Next transaction
+                    // for this address will use a nonce that is = this nonce + 1
+                    NONCE.with_borrow_mut(|nonce| {
+                        *nonce = Some(tx.nonce);
+                    });
+                    TransactionResult {
+                        hash: format!("{:?}", tx.hash),
+                        status: "Success".to_string(),
+                    }
+                }
+                None => TransactionResult {
+                    hash: String::new(),
+                    status: "Failed: Could not get transaction.".to_string(),
+                },
+            }
+        }
+        Err(e) => TransactionResult {
+            hash: String::new(),
+            status: "Failed: cock.".to_string(),
+        },
     }
 }
 
 #[ic_cdk::update]
 async fn get_balance() -> Result<String, String> {
-    let address = pubkey_bytes_to_address().await;
-    let address = address.parse::<Address>().map_err(|e| e.to_string())?;
+    //let address = pubkey_bytes_to_address().await;
+    let address = create_icp_sepolia_signer().await.address();
     let config = IcpConfig::new(RPC_SERVICE.clone());
     let provider = ProviderBuilder::new().on_icp(config);
     let result = provider.get_balance(address).await;
