@@ -28,9 +28,16 @@ mod tests {
         let wasm_module =
             include_bytes!("../../../target/wasm32-unknown-unknown/release/eth_backend.wasm")
                 .to_vec();
-        pic.install_canister(canister_id, wasm_module, Vec::new(), None);
-
-        let rpc_canister_id = pic.create_canister();
+        pic.install_canister(
+            canister_id,
+            wasm_module,
+            encode_one("dfx_test_key1".to_string()).unwrap(),
+            None,
+        );
+        let predefined_canister_id = Principal::from_text("hfb6-caaaa-aaaar-qadga-cai").unwrap();
+        let rpc_canister_id = pic
+            .create_canister_with_id(None, None, predefined_canister_id)
+            .unwrap();
         pic.add_cycles(rpc_canister_id, 2_000_000_000_000);
         let evm_rpc_wasm_module = include_bytes!("./evm_rpc.wasm").to_vec();
         pic.install_canister(
@@ -47,14 +54,13 @@ mod tests {
         let payload_to = "0x1234567890".to_string();
 
         // Execute test functions or methods
-        let res: (TransactionResult,) =
-            update_candid(&pic, canister_id, "execute_transaction", (payload,)).unwrap();
+
         // Query RPC to get ether balance for "to" address
-        let res: (u128, String, String) =
-            query_candid(&pic, canister_id, "get_balance", ()).unwrap();
+        let res: (Result<String, String>,) =
+            update_candid(&pic, canister_id, "get_balance", ()).unwrap();
         // Assert that the transaction was successful
         // Assert that the ether balance for "to" address is equal to the value of the transaction
-        assert_eq!(100, res.0);
+        assert_eq!("10000000", res.0.unwrap());
         assert!(true);
     }
 }

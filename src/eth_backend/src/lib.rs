@@ -11,6 +11,10 @@ use alloy::{
     transports::icp::{EthSepoliaService, IcpConfig, RpcApi, RpcService},
 };
 
+thread_local! {
+    static KEY_NAME : std::cell::RefCell<String> = std::cell::RefCell::new("dfx_test_key".to_string());
+}
+
 #[cfg(test)]
 mod test;
 
@@ -58,6 +62,16 @@ struct PublicKeyReply {
     pub public_key: Vec<u8>,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+struct AccountInitArgs {
+    key_name: String,
+}
+
+#[ic_cdk::init]
+fn init(key_name: String) {
+    KEY_NAME.with_borrow_mut(|k| *k = key_name);
+}
+
 #[ic_cdk::update]
 async fn pubkey_bytes_to_address() -> String {
     use ethers_core::k256::elliptic_curve::sec1::ToEncodedPoint;
@@ -81,12 +95,10 @@ async fn pubkey_bytes_to_address() -> String {
 
 #[ic_cdk::update]
 async fn get_public_key() -> Result<PublicKeyReply, String> {
+    let test_key_name = KEY_NAME.with_borrow(|k| k.clone());
     let key_id = EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
-        #[cfg(not(test))]
-        name: "dfx_test_key".to_string(),
-        #[cfg(test)]
-        name: "dfx_test_key1".to_string(),
+        name: test_key_name.to_string(),
     };
     let ic_canister_id = "aaaaa-aa";
     let ic = Principal::from_text(&ic_canister_id).unwrap();
